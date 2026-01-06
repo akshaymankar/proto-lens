@@ -14,6 +14,7 @@
 --
 -- See @README.md@ for instructions on how to use proto-lens with Cabal.
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE DataKinds #-}
 module Data.ProtoLens.Setup
     ( defaultMainGeneratingProtos
     , defaultMainGeneratingSpecificProtos
@@ -86,6 +87,11 @@ import Distribution.Verbosity
     , normal
 #endif
     )
+
+#if MIN_VERSION_Cabal(3,14,0)
+import Distribution.Utils.Path (getSymbolicPath, RelativePath, Pkg, FileOrDir (..))
+#endif
+
 import System.FilePath
     ( (</>)
     , (<.>)
@@ -177,10 +183,14 @@ generatingProtos root = generatingSpecificProtos root getProtos
            . filter (isSubdirectoryOf root)
            $ files
 
+#if MIN_VERSION_Cabal(2,14,0)
+match :: PackageDescription -> RelativePath Pkg 'File -> IO [FilePath]
+match desc f = map getSymbolicPath <$> matchDirFileGlob normal (specVersion desc) Nothing f
+#elif MIN_VERSION_Cabal(2,4,0)
 match :: PackageDescription -> FilePath -> IO [FilePath]
-#if MIN_VERSION_Cabal(2,4,0)
 match desc f = matchDirFileGlob normal (specVersion desc) "." f
 #else
+match :: PackageDescription -> FilePath -> IO [FilePath]
 match _ f = matchFileGlob f
 #endif
 
@@ -254,7 +264,11 @@ generateSources root l files = withSystemTempDirectory "protoc-out" $ \tmpDir ->
           let sourcePath = tmpDir </> f
           sourceExists <- doesFileExist sourcePath
           when sourceExists $ do
+#if MIN_VERSION_Cabal(3,14,0)
+            let dest = getSymbolicPath (autogenComponentModulesDir l compBI) </> f
+#else
             let dest = autogenComponentModulesDir l compBI </> f
+#endif
             copyIfDifferent sourcePath dest
 
 -- Note: we do a copy rather than a move since a given module may be used in
